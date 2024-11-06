@@ -83,8 +83,15 @@ module.Run.Begin = function(plr: Player)
 	end
 	
 	runDB.Value = true
+
 	
-	hum.WalkSpeed = 32
+
+	while runDB.Value == true do
+		hum.WalkSpeed = 32
+		task.wait(0.1)
+	end
+
+
 	
 end
 
@@ -137,11 +144,19 @@ module.Dodge.Begin = function(plr: Player, cooldown: number, dir: string)
 		return
 	end
 
+	if plr.playerData.Stamina.Value < 10 then
+		print("Not enough stamina to dodge")
+		return
+	end
+
 	if DashRemote:InvokeServer() == false then
 		return
 	end
 
-
+	if plr.playerData.amethystCombat.Blocking.Value > 0 then
+		print("Cannot dodge while blocking")
+		return
+	end
 
 	dodgeDB.Value = true
 	hum.WalkSpeed = 0
@@ -216,17 +231,16 @@ module.Dodge.Begin = function(plr: Player, cooldown: number, dir: string)
 		end
 	end
 
-
-
+	
 
 	task.delay(0.6, function()
 		bodyVel.Velocity *= 0.3
 		task.wait(0.2)
 		bodyVel:Destroy()
-
-		task.wait(Settings.DashCooldown)
-		dodgeDB.Value = false
 	end)
+
+	task.wait(Settings.DashCooldown)
+	dodgeDB.Value = false
 
 	hum.WalkSpeed = 16
 end

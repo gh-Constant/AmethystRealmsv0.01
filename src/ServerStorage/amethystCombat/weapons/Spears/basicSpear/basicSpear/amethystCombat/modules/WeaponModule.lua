@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- WeaponModule
+local blockRemote = ReplicatedStorage.amethystCombat.remotes.blockRemote
 
 local WeaponModule = {}
 WeaponModule.__index = WeaponModule
@@ -15,7 +16,8 @@ function WeaponModule.new(tool)
 		idle = tool.amethystCombat.animations.idle,
 		equip = tool.amethystCombat.animations.equip,
 		right = tool.amethystCombat.animations.right,
-		left = tool.amethystCombat.animations.left
+		left = tool.amethystCombat.animations.left,
+		block = tool.amethystCombat.animations.block,
 	}
 
 	self.tracks = {}
@@ -27,8 +29,6 @@ end
 
 function WeaponModule:initializeEventListeners()
 	local equipTrack = self.tracks.equip
-	local rightAttack = self.tracks.right
-	local leftAttack = self.tracks.left
 
 
 	if equipTrack then
@@ -61,10 +61,19 @@ function WeaponModule:setTransparency(transparency)
 end
 
 function WeaponModule:playAnimation(animationName, duration)
+	if duration == 0 then
+		self.tracks[animationName]:Play()
+	else
+		local track = self.tracks[animationName]
+		local speed = track.Length / duration
+		track:Play()
+		track:AdjustSpeed(speed)
+	end
+end
+
+function WeaponModule:stopAnimation(animationName)
 	local track = self.tracks[animationName]
-	local speed = track.Length / duration
-	track:Play()
-	track:AdjustSpeed(speed)
+	track:Stop()
 end
 
 function WeaponModule:equip()
@@ -119,6 +128,21 @@ function WeaponModule:hitEnemy()
 	else
 		warn("Player data or combat data not found for player.")
 	end
+end
+
+function WeaponModule:block()
+	print("Blocked")
+
+	self:playAnimation("block", 0)
+
+	blockRemote:FireServer(self.tool, 1)
+
+end
+
+function WeaponModule:unblock()
+	print("Unblocked")
+	self:stopAnimation("block")
+	blockRemote:FireServer(self.tool, 0)
 end
 
 function WeaponModule:unequip()

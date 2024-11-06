@@ -15,7 +15,8 @@ local function handleInputBegan(input, gameProcessed)
 
 		-- Check if the control is for running or dashing
 		if control == amethystMovement.Controls.Run.Value then
-			amethystMovementModule.Run.Begin(player)
+			--amethystMovementModule.Run.Begin(player)
+			print("run")
 		elseif control == amethystMovement.Controls.Dodge.Value then
 			if amethystMovement.Values.Dodge.Value == false then
 				local forward = uis:IsKeyDown(Enum.KeyCode.W)

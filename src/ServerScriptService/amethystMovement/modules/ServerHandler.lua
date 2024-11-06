@@ -37,9 +37,22 @@ function ServerHandler:Dash(player)
                     print("Dodging while on cooldown")
                     return
                 else
+
+                    if player.playerData.Stamina.Value < 10 then
+                        print("Not enough stamina to dash")
+                        return
+                    end
+
+                    if player.playerData.amethystCombat.Blocking.Value > 0 then
+                        print("Cannot dash while blocking")
+                        return
+                    end
+
                     -- Set Dodge to true and start cooldown
                     dodgeValue.Value = true
                     print("Dash initiated!")
+
+                    player.playerData.Stamina.Value -= 10
                     
                     -- Start a delayed coroutine to reset Dodge after the cooldown
                     task.delay(self.DashCooldown, function()
