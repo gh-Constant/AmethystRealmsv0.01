@@ -8,6 +8,28 @@ local blockRemote = ReplicatedStorage:WaitForChild("amethystCombat").remotes.blo
 local RaycastHitbox = require(game:GetService("ServerScriptService").amethystCombat.modules.RaycastHitboxV4)
 local hitEnemies = {}
 local DEBUG_MODE = true -- Toggle for visual debugging
+local SoundService = game:GetService("SoundService")
+local StunModule = require(script.Parent.Parent.modules.StunModule)
+
+-- Sound configuration
+local SOUND_SOURCES = {
+    BLOCK = "rbxassetid://211059653",
+    HIT_BLOCK = "rbxassetid://5763723309",
+    HIT = "rbxassetid://935843979",
+    ATTACK = "rbxassetid://7171591581",
+    PARRY = "rbxassetid://17450213191"
+}
+
+-- Sound helper function
+local function playSound(soundId, parent, properties)
+    local sound = Instance.new("Sound")
+    sound.SoundId = soundId
+    sound.Volume = properties.Volume or 1
+    sound.PlaybackSpeed = properties.PlaybackSpeed or 1
+    sound.Parent = parent
+    sound:Play()
+    game:GetService("Debris"):AddItem(sound, sound.TimeLength + 0.1)
+end
 
 -- Function to handle the attack logic
 local function onAttack(player, tool)
@@ -18,6 +40,12 @@ local function onAttack(player, tool)
 	
 	-- Clear the hit enemies table for this new attack
 	hitEnemies[player.UserId] = {}
+	
+	-- Play attack sound
+	playSound(SOUND_SOURCES.ATTACK, tool.Model.Blade, {
+		Volume = 0.8,
+		PlaybackSpeed = 1
+	})
 	
 	local character = player.Character
 	local newHitbox = RaycastHitbox.new(tool.Model.Blade)
@@ -31,7 +59,7 @@ local function onAttack(player, tool)
 
 	newHitbox.OnHit:Connect(function(hit)
 
-		print("server : hitted "..hit)
+		print("server : hitted "..hit.Name)
 
 		if player.playerData.amethystMovement.Values.Dodge.Value then 
 			print("cannot hit while dodging")
@@ -43,6 +71,82 @@ local function onAttack(player, tool)
 		end
 
 		if not hit then return end
+		
+		-- Check if we hit a BlockShield
+		if hit.Name == "BlockPart" then
+
+			local enemy = hit.Parent
+
+			if not game.Players:GetPlayerFromCharacter(enemy) then 
+				print("enemy is not a player, blocking for bots is in development")
+				return
+			end
+
+			local enemyId = enemy:GetAttribute("ID")
+			local enemyPlayer = game.Players:GetPlayerByCharacter(enemy)
+			local enemyTool = hit.Parent:FindFirstChildOfClass("Tool")
+
+			local damageReduction = enemyTool.amethystCombat.settings.blockPourcentage.Value
+			
+			if not enemyId then 
+				enemy:SetAttribute("ID", math.random(1, 100000000)) 
+				enemyId = enemy:GetAttribute("ID")
+			end
+			
+			-- Check if this enemy was already hit in this attack
+			if hitEnemies[player.UserId][enemyId] then return end
+			
+			if character and (character.PrimaryPart.Position - enemy.HumanoidRootPart.Position).Magnitude <= 20 then
+				hitEnemies[player.UserId][enemyId] = true
+				
+				print("Player : "..player.Name.." hit "..enemy.Name.." with "..damageReduction.."% damage reduction")
+
+				-- Check for god block (blocking value between 0 and 0.5)
+				local isGodBlock = enemyPlayer and 
+					enemyPlayer.playerData.amethystCombat.Blocking.Value > 0 and 
+					enemyPlayer.playerData.amethystCombat.Blocking.Value <= 0.5
+				
+				if isGodBlock then
+					print("God Block!")
+					
+					-- Play parry sound
+					playSound(SOUND_SOURCES.PARRY, enemy.HumanoidRootPart, {
+						Volume = 1,
+						PlaybackSpeed = 1
+					})
+					
+					-- Stun the attacker
+					local attackingPlayer = game.Players:GetPlayerFromCharacter(character)
+					if attackingPlayer then
+						StunModule.StunPlayer(attackingPlayer, 1.5) -- Stun for 1.5 seconds
+					end
+					
+					-- No damage on perfect block
+					return
+				end
+				
+				playSound(SOUND_SOURCES.HIT_BLOCK, enemy.HumanoidRootPart, {
+					Volume = 0.8,
+					PlaybackSpeed = 1
+				})
+				
+				-- Reduced damage for normal blocks
+				local reducedDamage = tool.amethystCombat.settings.damage.Value * 0.2
+				hit.Parent.Humanoid:TakeDamage(reducedDamage)
+				
+				-- Block effect
+				local BlockEffect = HIT_EFFECT_HANDLER.new(
+					enemy.HumanoidRootPart,
+					ParticleFolder.BlockEffect,
+					0.5,
+					1
+				)
+				BlockEffect:GenerateParticles()
+			end
+			return -- Exit after handling block
+		end
+		
+		-- Regular hit handling continues below
 		if not hit.Parent:FindFirstChildOfClass("Humanoid") then return end
 		
 		local enemy = hit.Parent
@@ -60,6 +164,8 @@ local function onAttack(player, tool)
 		if character and (character.PrimaryPart.Position - enemy.HumanoidRootPart.Position).Magnitude <= 20 then
 			-- Mark this enemy as hit for this attack
 			hitEnemies[player.UserId][enemyId] = true
+
+			print("player : "..player.Name.." hit "..enemy.Name)
 			
 			print("server : passed sanity check") -- Example distance check
 			local playerData = player:FindFirstChild("playerData")
@@ -86,6 +192,12 @@ local function onAttack(player, tool)
 			else
 				warn("Player data or combat data not found for player.")
 			end
+
+			-- Play hit sound
+			playSound(SOUND_SOURCES.HIT, enemy.HumanoidRootPart, {
+				Volume = 1,
+				PlaybackSpeed = 1
+			})
 		else
 			print("Player is too far to hit.")
 		end
@@ -126,6 +238,12 @@ local function onBlock(player, tool, blockState)
         -- Add stamina check
         if player.playerData.Stamina.Value < 1 then return end
         print("Server : Blocked")
+
+						-- Play block sounds
+		playSound(SOUND_SOURCES.BLOCK, tool.Model.Blade, {
+			Volume = 1,
+			PlaybackSpeed = 1
+		})
         
         -- Create shield if it doesn't exist
         if not character:FindFirstChild("BlockShield") then

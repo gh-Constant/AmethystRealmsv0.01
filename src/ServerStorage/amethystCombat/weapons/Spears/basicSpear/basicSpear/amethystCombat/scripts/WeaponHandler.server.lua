@@ -2,11 +2,11 @@
 local SSS = game:GetService("ServerScriptService")
 local Domain = require(SSS.amethystCombat.modules.Domains)
 local tool = script.Parent.Parent.Parent
-
+local domainName
 
 tool.Equipped:Connect(function()
 	local player = game.Players:GetPlayerFromCharacter(tool.Parent)
-	local domainName = player.playerData.amethystCombat.Domain.Value
+	domainName = player:WaitForChild("playerData").amethystCombat.Domain.Value
 
 	if domainName then
 		local domainInstance = Domain.getDomainByName(domainName)
@@ -19,7 +19,7 @@ end)
 
 tool.Unequipped:Connect(function()
 	local player = tool.Parent.Parent
-	local domainName = player.playerData.amethystCombat.Domain.Value
+	domainName = player:WaitForChild("playerData").amethystCombat.Domain.Value
 
 	if domainName then
 		local domainInstance = Domain.getDomainByName(domainName)
