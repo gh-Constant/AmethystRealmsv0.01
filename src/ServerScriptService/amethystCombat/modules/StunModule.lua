@@ -39,6 +39,10 @@ function StunModule.StunPlayer(player, duration)
 	local character = player.Character
 	if not character then return end
 	
+	-- Check if already stunned
+	if character:GetAttribute("Stunned") then return end
+	character:SetAttribute("Stunned", true)
+	
 	-- Set stun state
 	local humanoid = character:FindFirstChild("Humanoid")
 	if not humanoid then return end
@@ -46,25 +50,24 @@ function StunModule.StunPlayer(player, duration)
 	-- Create stun effect
 	local stunUI = createStunUI(character)
 	
-	-- Store current animations and stop them
-	local animator = humanoid:WaitForChild("Animator")
-	local playingTracks = {}
-	
-	-- Stop all current animations
-	for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-		playingTracks[track.Animation.AnimationId] = {
-			track = track,
-			timePosition = track.TimePosition,
-			weight = track.WeightCurrent
-		}
-		track:Stop(0.1)
-	end
-	
-	-- Disable movement
+	-- Store original values
 	local oldWalkSpeed = humanoid.WalkSpeed
 	local oldJumpPower = humanoid.JumpPower
-	humanoid.WalkSpeed = 0
-	humanoid.JumpPower = 0
+	
+	-- Create a heartbeat connection to continuously enforce stun
+	local stunConnection
+	stunConnection = game:GetService("RunService").Heartbeat:Connect(function()
+		if humanoid then
+			humanoid.WalkSpeed = 0
+			humanoid.JumpPower = 0
+		end
+	end)
+	
+	-- Stop all current animations and prevent new ones
+	local animator = humanoid:WaitForChild("Animator")
+	for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+		track:Stop(0.1)
+	end
 	
 	-- Prevent new animations during stun
 	local animationConnection
@@ -94,17 +97,12 @@ function StunModule.StunPlayer(player, duration)
 	
 	-- Reset after duration
 	task.delay(duration, function()
+		if stunConnection then
+			stunConnection:Disconnect()
+		end
 		if humanoid then
 			humanoid.WalkSpeed = oldWalkSpeed
 			humanoid.JumpPower = oldJumpPower
-			
-			-- Resume stored animations
-			for animId, data in pairs(playingTracks) do
-				local track = data.track
-				track:Play(0.1)
-				track.TimePosition = data.timePosition
-				track:AdjustWeight(data.weight, 0.1)
-			end
 		end
 		
 		if stunUI then
@@ -115,6 +113,9 @@ function StunModule.StunPlayer(player, duration)
 		end
 		if animationConnection then
 			animationConnection:Disconnect()
+		end
+		if character then
+			character:SetAttribute("Stunned", false)
 		end
 	end)
 end

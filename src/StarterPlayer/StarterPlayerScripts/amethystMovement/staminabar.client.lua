@@ -69,8 +69,15 @@ fillGradient.Parent = fillBar
 
 -- Update stamina bar with tweening
 local function updateStaminaBar()
-    local currentStamina = player.playerData.Stamina.Value
-    local maxStamina = player.playerData.MaxStamina.Value
+
+    local playerData = player:WaitForChild("playerData", 30)
+    if not playerData then
+        warn("Failed to get playerData for stamina bar")
+        return
+    end
+
+    local currentStamina = playerData.Stamina.Value
+    local maxStamina = playerData.MaxStamina.Value
     
     -- Calculate fill amount (0 to 1)
     local fillAmount = currentStamina / maxStamina

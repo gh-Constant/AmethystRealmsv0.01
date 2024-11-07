@@ -1,9 +1,17 @@
 local RS = game:GetService("ReplicatedStorage")
-local amethystMovement = RS:FindFirstChild("amethystMovement")
-local amethystMovementModule = require(amethystMovement.modules.main)
+local amethystMovementModule = require(RS.amethystMovement.modules.main)
 local player = game.Players.LocalPlayer
-local playerData = player:FindFirstChild("playerData")
-local amethystMovement = playerData:FindFirstChild("amethystMovement")
+local playerData = player:WaitForChild("playerData")
+if not playerData then
+    warn("Failed to get playerData for controls")
+    return
+end
+
+local amethystMovement = playerData:WaitForChild("amethystMovement")
+if not amethystMovement then
+    warn("Failed to get amethystCombat for controls")
+    return
+end
 local uis = game:GetService("UserInputService")
 local dodgeCooldown = 1
 

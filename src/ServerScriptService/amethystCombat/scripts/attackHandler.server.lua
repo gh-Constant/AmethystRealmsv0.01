@@ -1,17 +1,37 @@
+--[[---------------------------------------------------------------------------------------
+    AmethystCombat Attack Handler
+    Handles all combat-related interactions including attacks, blocking, and hit detection
+---------------------------------------------------------------------------------------]]--
+
+--[[---------------------------------------------------------------------------------------
+    Dependencies
+---------------------------------------------------------------------------------------]]--
+-- Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local attackRemote = ReplicatedStorage:WaitForChild("amethystCombat").remotes.attackRemote
 local ServerScriptService = game:GetService("ServerScriptService")
 local ServerStorage = game:GetService("ServerStorage")
-local ParticleFolder = ServerStorage.amethystCombat.assets.hitEffect -- Folder containing particle templates
-local HIT_EFFECT_HANDLER = require(ServerScriptService:WaitForChild("amethystCombat").modules.HitEffectHandler)
-local blockRemote = ReplicatedStorage:WaitForChild("amethystCombat").remotes.blockRemote
-local RaycastHitbox = require(game:GetService("ServerScriptService").amethystCombat.modules.RaycastHitboxV4)
-local hitEnemies = {}
-local DEBUG_MODE = true -- Toggle for visual debugging
 local SoundService = game:GetService("SoundService")
+local Debris = game:GetService("Debris")
+
+-- Modules
+local RaycastHitbox = require(ServerScriptService.amethystCombat.modules.RaycastHitboxV4)
+local HIT_EFFECT_HANDLER = require(ServerScriptService.amethystCombat.modules.HitEffectHandler)
 local StunModule = require(script.Parent.Parent.modules.StunModule)
 
--- Sound configuration
+--[[---------------------------------------------------------------------------------------
+    Configuration
+---------------------------------------------------------------------------------------]]--
+-- Remotes
+local amethystCombat = ReplicatedStorage:WaitForChild("amethystCombat")
+local attackRemote = amethystCombat.remotes.attackRemote
+local blockRemote = amethystCombat.remotes.blockRemote
+
+-- Assets
+local ParticleFolder = ServerStorage.amethystCombat.assets.hitEffect
+
+-- Constants
+local DEBUG_MODE = true
+
 local SOUND_SOURCES = {
     BLOCK = "rbxassetid://211059653",
     HIT_BLOCK = "rbxassetid://5763723309",
@@ -20,18 +40,143 @@ local SOUND_SOURCES = {
     PARRY = "rbxassetid://17450213191"
 }
 
--- Sound helper function
-local function playSound(soundId, parent, properties)
+-- State
+local hitEnemies = {}
+
+--[[---------------------------------------------------------------------------------------
+    Sound Helper System
+---------------------------------------------------------------------------------------]]--
+local SoundHelper = {}
+
+--[[ 
+    @description Plays a sound with specified properties and auto-cleanup
+    @param soundId string - The ID of the sound to play
+    @param parent Instance - The parent object to attach the sound to
+    @param properties table - Properties for the sound {Volume: number, PlaybackSpeed: number}
+]]--
+function SoundHelper.playSound(soundId, parent, properties)
     local sound = Instance.new("Sound")
     sound.SoundId = soundId
     sound.Volume = properties.Volume or 1
     sound.PlaybackSpeed = properties.PlaybackSpeed or 1
     sound.Parent = parent
     sound:Play()
-    game:GetService("Debris"):AddItem(sound, sound.TimeLength + 0.1)
+    Debris:AddItem(sound, sound.TimeLength + 0.1)
 end
 
--- Function to handle the attack logic
+--[[---------------------------------------------------------------------------------------
+    Block System
+---------------------------------------------------------------------------------------]]--
+local BlockSystem = {}
+
+--[[
+    @description Creates a block shield for the character
+    @param character Model - The character to create the shield for
+    @return Instance - The created shield part
+]]--
+function BlockSystem.createBlockShield(character)
+    local shield = Instance.new("Part")
+    shield.Size = Vector3.new(5, 8, 0.5)
+    shield.Transparency = DEBUG_MODE and 0.5 or 1
+    shield.Color = Color3.fromRGB(147, 112, 219)
+    shield.CanCollide = false
+    shield.Massless = true
+    shield.Name = "BlockShield"
+    
+    local weld = Instance.new("Weld")
+    weld.Part0 = character.HumanoidRootPart
+    weld.Part1 = shield
+    weld.C0 = CFrame.new(0, 0, -2)
+    weld.Parent = shield
+    
+    shield.Parent = character
+    return shield
+end
+
+--[[---------------------------------------------------------------------------------------
+    Combat System
+---------------------------------------------------------------------------------------]]--
+local CombatSystem = {}
+
+--[[
+    @description Handles when an attack hits a blocking player
+    @param player Player - The attacking player
+    @param enemy Model - The blocking character
+    @param tool Instance - The weapon being used
+    @param hit Instance - The part that was hit
+]]--
+function CombatSystem.handleBlockHit(player, enemy, tool, hit)
+    local enemyPlayer = game.Players:GetPlayerByCharacter(enemy)
+    local enemyTool = enemy:FindFirstChildOfClass("Tool")
+    local damageReduction = enemyTool.amethystCombat.settings.blockPourcentage.Value
+    
+    -- Check for god block
+    local isGodBlock = enemyPlayer and 
+        enemyPlayer.playerData.amethystCombat.Blocking.Value > 0 and 
+        enemyPlayer.playerData.amethystCombat.Blocking.Value <= 0.5
+    
+    if isGodBlock then
+        SoundHelper.playSound(SOUND_SOURCES.PARRY, enemy.HumanoidRootPart, {Volume = 1})
+        StunModule.StunPlayer(player, 1.5)
+        return
+    end
+    
+    -- Normal block
+    SoundHelper.playSound(SOUND_SOURCES.HIT_BLOCK, enemy.HumanoidRootPart, {Volume = 0.8})
+    local reducedDamage = tool.amethystCombat.settings.damage.Value * 0.2
+    hit.Parent.Humanoid:TakeDamage(reducedDamage)
+    
+    local BlockEffect = HIT_EFFECT_HANDLER.new(
+        enemy.HumanoidRootPart,
+        ParticleFolder.BlockEffect,
+        0.5,
+        1
+    )
+    BlockEffect:GenerateParticles()
+end
+
+--[[
+    @description Handles a successful hit on an enemy
+    @param enemy Model - The character that was hit
+    @param tool Instance - The weapon used for the attack
+]]--
+function CombatSystem.handleNormalHit(enemy, tool)
+    if not tool or not tool:FindFirstChild("amethystCombat") then
+        warn("Tool or amethystCombat settings missing for damage calculation")
+        return
+    end
+
+    enemy.Humanoid:TakeDamage(tool.amethystCombat.settings.damage.Value)
+    
+    local ParticlesEffect = HIT_EFFECT_HANDLER.new(
+        enemy.HumanoidRootPart,
+        ParticleFolder.HitEffect,
+        1,
+        1
+    )
+    
+    local MeshEffect = HIT_EFFECT_HANDLER.new(
+        enemy.HumanoidRootPart,
+        ParticleFolder.HitEffectModel,
+        0.25,
+        6
+    )
+    
+    MeshEffect:MeshExplode()
+    ParticlesEffect:GenerateParticles()
+    
+    SoundHelper.playSound(SOUND_SOURCES.HIT, enemy.HumanoidRootPart, {Volume = 1})
+end
+
+--[[---------------------------------------------------------------------------------------
+    Event Handlers
+---------------------------------------------------------------------------------------]]--
+
+--[[
+    @description Handles attack events from clients
+    @param player Player - The player attacking
+    @param tool Instance - The weapon being used
+]]--
 local function onAttack(player, tool)
 	if player.playerData.amethystCombat.attackCooldown.Value == 1 then return end
 	-- Add stamina check
@@ -42,7 +187,7 @@ local function onAttack(player, tool)
 	hitEnemies[player.UserId] = {}
 	
 	-- Play attack sound
-	playSound(SOUND_SOURCES.ATTACK, tool.Model.Blade, {
+	SoundHelper.playSound(SOUND_SOURCES.ATTACK, tool.Model.Blade, {
 		Volume = 0.8,
 		PlaybackSpeed = 1
 	})
@@ -86,63 +231,7 @@ local function onAttack(player, tool)
 			local enemyPlayer = game.Players:GetPlayerByCharacter(enemy)
 			local enemyTool = hit.Parent:FindFirstChildOfClass("Tool")
 
-			local damageReduction = enemyTool.amethystCombat.settings.blockPourcentage.Value
-			
-			if not enemyId then 
-				enemy:SetAttribute("ID", math.random(1, 100000000)) 
-				enemyId = enemy:GetAttribute("ID")
-			end
-			
-			-- Check if this enemy was already hit in this attack
-			if hitEnemies[player.UserId][enemyId] then return end
-			
-			if character and (character.PrimaryPart.Position - enemy.HumanoidRootPart.Position).Magnitude <= 20 then
-				hitEnemies[player.UserId][enemyId] = true
-				
-				print("Player : "..player.Name.." hit "..enemy.Name.." with "..damageReduction.."% damage reduction")
-
-				-- Check for god block (blocking value between 0 and 0.5)
-				local isGodBlock = enemyPlayer and 
-					enemyPlayer.playerData.amethystCombat.Blocking.Value > 0 and 
-					enemyPlayer.playerData.amethystCombat.Blocking.Value <= 0.5
-				
-				if isGodBlock then
-					print("God Block!")
-					
-					-- Play parry sound
-					playSound(SOUND_SOURCES.PARRY, enemy.HumanoidRootPart, {
-						Volume = 1,
-						PlaybackSpeed = 1
-					})
-					
-					-- Stun the attacker
-					local attackingPlayer = game.Players:GetPlayerFromCharacter(character)
-					if attackingPlayer then
-						StunModule.StunPlayer(attackingPlayer, 1.5) -- Stun for 1.5 seconds
-					end
-					
-					-- No damage on perfect block
-					return
-				end
-				
-				playSound(SOUND_SOURCES.HIT_BLOCK, enemy.HumanoidRootPart, {
-					Volume = 0.8,
-					PlaybackSpeed = 1
-				})
-				
-				-- Reduced damage for normal blocks
-				local reducedDamage = tool.amethystCombat.settings.damage.Value * 0.2
-				hit.Parent.Humanoid:TakeDamage(reducedDamage)
-				
-				-- Block effect
-				local BlockEffect = HIT_EFFECT_HANDLER.new(
-					enemy.HumanoidRootPart,
-					ParticleFolder.BlockEffect,
-					0.5,
-					1
-				)
-				BlockEffect:GenerateParticles()
-			end
+			CombatSystem.handleBlockHit(player, enemy, enemyTool, hit)
 			return -- Exit after handling block
 		end
 		
@@ -171,33 +260,10 @@ local function onAttack(player, tool)
 			local playerData = player:FindFirstChild("playerData")
 			if playerData and playerData:FindFirstChild("amethystCombat") then
 				-- Apply damage or call a function to apply damage
-				hit.Parent.Humanoid:TakeDamage(tool.amethystCombat.settings.damage.Value)
-
-				local ParticlesEffect = HIT_EFFECT_HANDLER.new(
-					enemy.HumanoidRootPart,
-					ParticleFolder.HitEffect,
-					1,
-					1
-				)
-
-				local MeshEffect = HIT_EFFECT_HANDLER.new(
-					enemy.HumanoidRootPart,
-					ParticleFolder.HitEffectModel,
-					0.25,
-					6
-				)
-
-				MeshEffect:MeshExplode()
-				ParticlesEffect:GenerateParticles()
+				CombatSystem.handleNormalHit(enemy, tool)
 			else
 				warn("Player data or combat data not found for player.")
 			end
-
-			-- Play hit sound
-			playSound(SOUND_SOURCES.HIT, enemy.HumanoidRootPart, {
-				Volume = 1,
-				PlaybackSpeed = 1
-			})
 		else
 			print("Player is too far to hit.")
 		end
@@ -210,26 +276,12 @@ local function onAttack(player, tool)
 	player.playerData.amethystCombat.attackCooldown.Value = 0
 end
 
-local function createBlockShield(character)
-    local shield = Instance.new("Part")
-    shield.Size = Vector3.new(5, 8, 0.5)
-    shield.Transparency = DEBUG_MODE and 0.5 or 1
-    shield.Color = Color3.fromRGB(147, 112, 219) -- Purple color
-    shield.CanCollide = false
-    shield.Massless = true
-    shield.Name = "BlockShield"
-    
-    -- Create weld
-    local weld = Instance.new("Weld")
-    weld.Part0 = character.HumanoidRootPart
-    weld.Part1 = shield
-    weld.C0 = CFrame.new(0, 0, -2) -- Position 2 studs in front of player
-    weld.Parent = shield
-    
-    shield.Parent = character
-    return shield
-end
-
+--[[
+    @description Handles block events from clients
+    @param player Player - The player blocking
+    @param tool Instance - The weapon being used
+    @param blockState number - The block state (1 for blocking, 0 for not blocking)
+]]--
 local function onBlock(player, tool, blockState)
     local character = player.Character
     if not character then return end
@@ -240,14 +292,14 @@ local function onBlock(player, tool, blockState)
         print("Server : Blocked")
 
 						-- Play block sounds
-		playSound(SOUND_SOURCES.BLOCK, tool.Model.Blade, {
+		SoundHelper.playSound(SOUND_SOURCES.BLOCK, tool.Model.Blade, {
 			Volume = 1,
 			PlaybackSpeed = 1
 		})
         
         -- Create shield if it doesn't exist
         if not character:FindFirstChild("BlockShield") then
-            createBlockShield(character)
+            BlockSystem.createBlockShield(character)
         end
         
         -- Store original walkspeed
@@ -297,6 +349,8 @@ local function onBlock(player, tool, blockState)
     end
 end
 
--- Connect the remote event to the function
+--[[---------------------------------------------------------------------------------------
+    Initialize
+---------------------------------------------------------------------------------------]]--
 attackRemote.OnServerEvent:Connect(onAttack)
 blockRemote.OnServerEvent:Connect(onBlock)
