@@ -28,7 +28,6 @@ function BloodDomain:new()
 
     -- Define Blood-specific passives
     instance:addPassive("Blood Enchantment", function(tool)
-        print("Blood Enchantment activated: increases DPS by blood.")
         local bloodEnchantment = game.ReplicatedStorage.amethystCombat.domains.Blood.Passives.Enchantment
         for _, particles in bloodEnchantment:GetChildren() do
             local newParticles = particles:Clone()
@@ -38,10 +37,8 @@ function BloodDomain:new()
 
     -- Define Blood-specific abilities
     instance:addAbility("Life Drain", function(tool)
-        print("Used Life Drain: steals a percentage of the enemy's health.")
     end)
     instance:addAbility("Blood Explosion", function(tool)
-        print("Used Blood Explosion: deals area damage around you.")
     end)
 
     return instance

@@ -77,7 +77,7 @@ local BlockSystem = {}
 function BlockSystem.createBlockShield(character)
     print("DEBUG: Creating block shield for:", character.Name)
     local shield = Instance.new("Part")
-    shield.Size = Vector3.new(5, 8, 0.5)
+    shield.Size = Vector3.new(7, 10, 0.5)
     shield.Transparency = DEBUG_MODE and 0.5 or 1
     shield.Color = Color3.fromRGB(147, 112, 219)
     shield.CanCollide = false
@@ -109,32 +109,47 @@ local CombatSystem = {}
 ]]--
 function CombatSystem.handleBlockHit(player, enemy, tool, hit)
     local defender = game.Players:GetPlayerFromCharacter(enemy)
+    print("[COMBAT] Block hit by", player.Name, "against", defender.Name, "- Block Value:", defender.playerData.amethystCombat.Blocking.Value)
     if not defender then return end
     
-    local enemyTool = defender:FindFirstChildOfClass("Tool")
+    local enemyTool = enemy:FindFirstChildOfClass("Tool")
+    print("[COMBAT] Enemy tool:", enemyTool.Name)
     if not enemyTool then return end
     
-    -- Check for god block
+    -- Check for god block (reduced from 1.5 to 0.4 seconds)
     local isGodBlock = defender and 
         defender.playerData.amethystCombat.Blocking.Value > 0 and 
-        defender.playerData.amethystCombat.Blocking.Value <= 1.5
+        defender.playerData.amethystCombat.Blocking.Value <= 0.1
     
     if isGodBlock then
-        print("[COMBAT] God Block triggered by", defender.Name, "against", player.Name)
-        SoundHelper.playSound(SOUND_SOURCES.PARRY, defender.HumanoidRootPart, {Volume = 1})
+        print("[COMBAT] God Block triggered by", defender.Name, "against", player.Name, "- Block Value:", defender.playerData.amethystCombat.Blocking.Value)
+        SoundHelper.playSound(SOUND_SOURCES.PARRY, enemy.HumanoidRootPart, {Volume = 1})
         StunModule.StunPlayer(player, 1.5)
         return
     end
     
-    -- Normal block
-    print("[COMBAT] Normal Block by", defender.Name, "- Damage reduced to 60%")
-    SoundHelper.playSound(SOUND_SOURCES.HIT_BLOCK, defender.HumanoidRootPart, {Volume = 0.8})
+    -- Normal block - Add hit cooldown check
+    local enemyId = enemy:GetAttribute("ID")
+    if not enemyId then 
+        enemy:SetAttribute("ID", math.random(1, 100000000)) 
+        enemyId = enemy:GetAttribute("ID")
+    end
+    
+    -- Check if this enemy was already hit in this attack
+    if hitEnemies[player.UserId] and hitEnemies[player.UserId][enemyId] then return end
+    
+    -- Mark this enemy as hit for this attack
+    if not hitEnemies[player.UserId] then hitEnemies[player.UserId] = {} end
+    hitEnemies[player.UserId][enemyId] = true
+    
+    print("[COMBAT] Normal Block by", defender.Name, "- Damage reduced to 60% - Block Value:", defender.playerData.amethystCombat.Blocking.Value)
+    SoundHelper.playSound(SOUND_SOURCES.HIT_BLOCK, enemy.HumanoidRootPart, {Volume = 0.8})
     
     local reducedDamage = tool.amethystCombat.settings.damage.Value * 0.6
     enemy.Humanoid:TakeDamage(reducedDamage)
     
     local BlockEffect = HIT_EFFECT_HANDLER.new(
-        defender.HumanoidRootPart,
+        enemy.HumanoidRootPart,
         ParticleFolder.BlockEffect,
         0.5,
         1
@@ -210,16 +225,12 @@ local function onAttack(player, tool)
 	player.playerData.Stamina.Value -= 5
 
 	newHitbox.OnHit:Connect(function(hit)
-		print("DEBUG: Hit detected on part:", hit.Name)
-		print("DEBUG: Parent of hit part:", hit.Parent.Name)
 
 		if player.playerData.amethystMovement.Values.Dodge.Value then 
-			print("DEBUG: Cannot hit while dodging")
 			return 
 		end
 
 		if player.playerData.amethystCombat.Blocking.Value > 0 then
-			print("DEBUG: Cannot hit while blocking")
 			return
 		end
 
@@ -230,7 +241,7 @@ local function onAttack(player, tool)
 		local hitPlayer = game.Players:GetPlayerFromCharacter(hitCharacter)
 		
 		if hitPlayer and hitPlayer.playerData.amethystCombat.Blocking.Value > 0 then
-			print("DEBUG: Hit a blocking player!")
+			print("[COMBAT] "..player.Name.." hit "..hitPlayer.Name.." while blocking")
 			CombatSystem.handleBlockHit(player, hitCharacter, tool, hit)
 			return
 		end
@@ -256,7 +267,6 @@ local function onAttack(player, tool)
 
 			print("player : "..player.Name.." hit "..enemy.Name)
 			
-			print("server : passed sanity check") -- Example distance check
 			local playerData = player:FindFirstChild("playerData")
 			if playerData and playerData:FindFirstChild("amethystCombat") then
 				-- Apply damage or call a function to apply damage
