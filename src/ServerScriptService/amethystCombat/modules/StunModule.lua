@@ -2,122 +2,101 @@ local StunModule = {}
 
 -- Services
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Create stun billboard GUI
+-- Get the existing remote
+local stunRemote = ReplicatedStorage.amethystCombat.remotes.stunRemote
+
+-- Create stun UI function
 local function createStunUI(character)
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "StunUI"
-	billboard.Size = UDim2.new(2, 0, 0.5, 0)
-	billboard.StudsOffset = Vector3.new(0, 3, 0)
-	billboard.AlwaysOnTop = true
+	local stunBillboard = Instance.new("BillboardGui")
+	stunBillboard.Name = "StunEffect"
+	stunBillboard.Size = UDim2.new(2, 0, 0.5, 0)
+	stunBillboard.StudsOffset = Vector3.new(0, 3, 0)
+	stunBillboard.AlwaysOnTop = true
 	
-	local frame = Instance.new("Frame")
-	frame.Name = "StunFrame"
-	frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	frame.BackgroundTransparency = 0.5
-	frame.Size = UDim2.new(1, 0, 1, 0)
-	frame.Parent = billboard
+	local stunLabel = Instance.new("TextLabel")
+	stunLabel.Name = "StunLabel"
+	stunLabel.Size = UDim2.new(1, 0, 1, 0)
+	stunLabel.BackgroundTransparency = 1
+	stunLabel.Text = "STUNNED!"
+	stunLabel.TextColor3 = Color3.new(1, 0, 0)
+	stunLabel.TextScaled = true
+	stunLabel.Font = Enum.Font.GothamBold
+	stunLabel.Parent = stunBillboard
 	
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.5, 0)
-	corner.Parent = frame
-	
-	local icon = Instance.new("ImageLabel")
-	icon.Name = "StunIcon"
-	icon.Image = "rbxassetid://yourStunIconId" -- Replace with your stun icon
-	icon.Size = UDim2.new(0.8, 0, 0.8, 0)
-	icon.Position = UDim2.new(0.1, 0, 0.1, 0)
-	icon.BackgroundTransparency = 1
-	icon.Parent = frame
-	
-	billboard.Parent = character.Head
-	return billboard
+	stunBillboard.Parent = character.Head
+	return stunBillboard
 end
 
 function StunModule.StunPlayer(player, duration)
+	print("Starting StunPlayer function for:", player.Name)
+	
 	local character = player.Character
 	if not character then return end
 	
-	-- Check if already stunned
-	if character:GetAttribute("Stunned") then return end
-	character:SetAttribute("Stunned", true)
+	-- Check if already stunned using playerData
+	if player.playerData.amethystCombat.Stunned.Value then return end
+	player.playerData.amethystCombat.Stunned.Value = true
 	
-	-- Set stun state
+	-- Fire the remote to play animation on client
+	stunRemote:FireClient(player, {
+		action = "PlayStunAnimation",
+		duration = duration
+	})
+	
 	local humanoid = character:FindFirstChild("Humanoid")
-	if not humanoid then return end
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not rootPart then return end
+	
+	-- Apply stun effects
+	rootPart.Anchored = true
+	humanoid.PlatformStand = true
 	
 	-- Create stun effect
 	local stunUI = createStunUI(character)
 	
-	-- Store original values
-	local oldWalkSpeed = humanoid.WalkSpeed
-	local oldJumpPower = humanoid.JumpPower
-	
-	-- Create a heartbeat connection to continuously enforce stun
-	local stunConnection
-	stunConnection = game:GetService("RunService").Heartbeat:Connect(function()
-		if humanoid then
-			humanoid.WalkSpeed = 0
-			humanoid.JumpPower = 0
+	-- Create a connection to clean up if the character dies
+	local deathConnection
+	deathConnection = humanoid.Died:Connect(function()
+		if stunUI then
+			stunUI:Destroy()
 		end
-	end)
-	
-	-- Stop all current animations and prevent new ones
-	local animator = humanoid:WaitForChild("Animator")
-	for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-		track:Stop(0.1)
-	end
-	
-	-- Prevent new animations during stun
-	local animationConnection
-	animationConnection = humanoid.AnimationPlayed:Connect(function(track)
-		track:Stop(0)
-	end)
-	
-	-- Animate stun icon
-	local rotation = 0
-	local connection
-	connection = game:GetService("RunService").Heartbeat:Connect(function(dt)
-		if stunUI and stunUI.Parent then
-			rotation = rotation + 180 * dt
-			stunUI.StunFrame.StunIcon.Rotation = rotation
-		else
-			connection:Disconnect()
+		if deathConnection then
+			deathConnection:Disconnect()
 		end
+		player.playerData.amethystCombat.Stunned.Value = false
 	end)
-	
-	-- Create countdown effect
-	local countdownTween = TweenService:Create(
-		stunUI.StunFrame,
-		TweenInfo.new(duration, Enum.EasingStyle.Linear),
-		{Size = UDim2.new(0, 0, 1, 0)}
-	)
-	countdownTween:Play()
 	
 	-- Reset after duration
-	task.delay(duration, function()
-		if stunConnection then
-			stunConnection:Disconnect()
-		end
+	local cleanupTask = task.delay(duration, function()
 		if humanoid then
-			humanoid.WalkSpeed = oldWalkSpeed
-			humanoid.JumpPower = oldJumpPower
+			humanoid.PlatformStand = false
 		end
+		if rootPart then
+			rootPart.Anchored = false
+		end
+		
+		-- Tell client to stop animation
+		stunRemote:FireClient(player, {
+			action = "StopStunAnimation"
+		})
 		
 		if stunUI then
 			stunUI:Destroy()
 		end
-		if connection then
-			connection:Disconnect()
+		
+		if deathConnection then
+			deathConnection:Disconnect()
 		end
-		if animationConnection then
-			animationConnection:Disconnect()
-		end
-		if character then
-			character:SetAttribute("Stunned", false)
+		
+		if player then
+			player.playerData.amethystCombat.Stunned.Value = false
 		end
 	end)
+	
+	-- Store cleanup task in case we need to cancel it early
+	character:SetAttribute("StunCleanupTask", cleanupTask)
 end
 
 return StunModule

@@ -11,14 +11,21 @@ function WeaponModule.new(tool)
 	self.attackspeed = tool.amethystCombat.settings.attackspeed.Value
 	self.equipspeed = tool.amethystCombat.settings.equipspeed.Value
 
-	-- Load animations
+	-- Load animations by creating Animation instances
 	self.animations = {
-		idle = tool.amethystCombat.animations.idle,
-		equip = tool.amethystCombat.animations.equip,
-		right = tool.amethystCombat.animations.right,
-		left = tool.amethystCombat.animations.left,
-		block = tool.amethystCombat.animations.block,
+		idle = Instance.new("Animation"),
+		equip = Instance.new("Animation"),
+		right = Instance.new("Animation"),
+		left = Instance.new("Animation"),
+		block = Instance.new("Animation"),
 	}
+
+	-- Set AnimationIds from the tool
+	self.animations.idle.AnimationId = tool.amethystCombat.animations.idle.AnimationId
+	self.animations.equip.AnimationId = tool.amethystCombat.animations.equip.AnimationId
+	self.animations.right.AnimationId = tool.amethystCombat.animations.right.AnimationId
+	self.animations.left.AnimationId = tool.amethystCombat.animations.left.AnimationId
+	self.animations.block.AnimationId = tool.amethystCombat.animations.block.AnimationId
 
 	self.tracks = {}
 	self.db = false

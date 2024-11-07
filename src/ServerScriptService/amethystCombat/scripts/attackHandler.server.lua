@@ -75,6 +75,7 @@ local BlockSystem = {}
     @return Instance - The created shield part
 ]]--
 function BlockSystem.createBlockShield(character)
+    print("DEBUG: Creating block shield for:", character.Name)
     local shield = Instance.new("Part")
     shield.Size = Vector3.new(5, 8, 0.5)
     shield.Transparency = DEBUG_MODE and 0.5 or 1
@@ -89,6 +90,7 @@ function BlockSystem.createBlockShield(character)
     weld.C0 = CFrame.new(0, 0, -2)
     weld.Parent = shield
     
+    print("DEBUG: Block shield created with size:", shield.Size)
     shield.Parent = character
     return shield
 end
@@ -106,28 +108,33 @@ local CombatSystem = {}
     @param hit Instance - The part that was hit
 ]]--
 function CombatSystem.handleBlockHit(player, enemy, tool, hit)
-    local enemyPlayer = game.Players:GetPlayerByCharacter(enemy)
-    local enemyTool = enemy:FindFirstChildOfClass("Tool")
-    local damageReduction = enemyTool.amethystCombat.settings.blockPourcentage.Value
+    local defender = game.Players:GetPlayerFromCharacter(enemy)
+    if not defender then return end
+    
+    local enemyTool = defender:FindFirstChildOfClass("Tool")
+    if not enemyTool then return end
     
     -- Check for god block
-    local isGodBlock = enemyPlayer and 
-        enemyPlayer.playerData.amethystCombat.Blocking.Value > 0 and 
-        enemyPlayer.playerData.amethystCombat.Blocking.Value <= 0.5
+    local isGodBlock = defender and 
+        defender.playerData.amethystCombat.Blocking.Value > 0 and 
+        defender.playerData.amethystCombat.Blocking.Value <= 1.5
     
     if isGodBlock then
-        SoundHelper.playSound(SOUND_SOURCES.PARRY, enemy.HumanoidRootPart, {Volume = 1})
+        print("[COMBAT] God Block triggered by", defender.Name, "against", player.Name)
+        SoundHelper.playSound(SOUND_SOURCES.PARRY, defender.HumanoidRootPart, {Volume = 1})
         StunModule.StunPlayer(player, 1.5)
         return
     end
     
     -- Normal block
-    SoundHelper.playSound(SOUND_SOURCES.HIT_BLOCK, enemy.HumanoidRootPart, {Volume = 0.8})
-    local reducedDamage = tool.amethystCombat.settings.damage.Value * 0.2
-    hit.Parent.Humanoid:TakeDamage(reducedDamage)
+    print("[COMBAT] Normal Block by", defender.Name, "- Damage reduced to 60%")
+    SoundHelper.playSound(SOUND_SOURCES.HIT_BLOCK, defender.HumanoidRootPart, {Volume = 0.8})
+    
+    local reducedDamage = tool.amethystCombat.settings.damage.Value * 0.6
+    enemy.Humanoid:TakeDamage(reducedDamage)
     
     local BlockEffect = HIT_EFFECT_HANDLER.new(
-        enemy.HumanoidRootPart,
+        defender.HumanoidRootPart,
         ParticleFolder.BlockEffect,
         0.5,
         1
@@ -203,36 +210,29 @@ local function onAttack(player, tool)
 	player.playerData.Stamina.Value -= 5
 
 	newHitbox.OnHit:Connect(function(hit)
-
-		print("server : hitted "..hit.Name)
+		print("DEBUG: Hit detected on part:", hit.Name)
+		print("DEBUG: Parent of hit part:", hit.Parent.Name)
 
 		if player.playerData.amethystMovement.Values.Dodge.Value then 
-			print("cannot hit while dodging")
+			print("DEBUG: Cannot hit while dodging")
 			return 
 		end
 
 		if player.playerData.amethystCombat.Blocking.Value > 0 then
+			print("DEBUG: Cannot hit while blocking")
 			return
 		end
 
 		if not hit then return end
 		
-		-- Check if we hit a BlockShield
-		if hit.Name == "BlockPart" then
-
-			local enemy = hit.Parent
-
-			if not game.Players:GetPlayerFromCharacter(enemy) then 
-				print("enemy is not a player, blocking for bots is in development")
-				return
-			end
-
-			local enemyId = enemy:GetAttribute("ID")
-			local enemyPlayer = game.Players:GetPlayerByCharacter(enemy)
-			local enemyTool = hit.Parent:FindFirstChildOfClass("Tool")
-
-			CombatSystem.handleBlockHit(player, enemy, enemyTool, hit)
-			return -- Exit after handling block
+		-- Check if we hit a character that's blocking
+		local hitCharacter = hit.Parent
+		local hitPlayer = game.Players:GetPlayerFromCharacter(hitCharacter)
+		
+		if hitPlayer and hitPlayer.playerData.amethystCombat.Blocking.Value > 0 then
+			print("DEBUG: Hit a blocking player!")
+			CombatSystem.handleBlockHit(player, hitCharacter, tool, hit)
+			return
 		end
 		
 		-- Regular hit handling continues below
@@ -283,68 +283,96 @@ end
     @param blockState number - The block state (1 for blocking, 0 for not blocking)
 ]]--
 local function onBlock(player, tool, blockState)
+    print("DEBUG: onBlock function called for player:", player.Name)
+    print("DEBUG: blockState:", blockState)
+    
     local character = player.Character
-    if not character then return end
+    if not character then 
+        print("DEBUG: Character not found!")
+        return 
+    end
+    print("DEBUG: Character found:", character.Name)
     
     if blockState == 1 then
-        -- Add stamina check
-        if player.playerData.Stamina.Value < 1 then return end
-        print("Server : Blocked")
-
-						-- Play block sounds
-		SoundHelper.playSound(SOUND_SOURCES.BLOCK, tool.Model.Blade, {
-			Volume = 1,
-			PlaybackSpeed = 1
-		})
+        print("DEBUG: Starting block sequence")
+        
+        -- Stamina check
+        print("DEBUG: Current stamina:", player.playerData.Stamina.Value)
+        if player.playerData.Stamina.Value < 1 then 
+            print("DEBUG: Not enough stamina to block!")
+            return 
+        end
+        
+        print("DEBUG: Playing block sound")
+        -- Play block sounds
+        SoundHelper.playSound(SOUND_SOURCES.BLOCK, tool.Model.Blade, {
+            Volume = 1,
+            PlaybackSpeed = 1
+        })
         
         -- Create shield if it doesn't exist
         if not character:FindFirstChild("BlockShield") then
+            print("DEBUG: Creating block shield")
             BlockSystem.createBlockShield(character)
         end
         
         -- Store original walkspeed
+        print("DEBUG: Storing original walkspeed:", character.Humanoid.WalkSpeed)
         character:SetAttribute("OriginalWalkSpeed", character.Humanoid.WalkSpeed)
         
         -- Create a thread for continuous effects
+        print("DEBUG: Starting block thread")
         local thread = task.spawn(function()
             while character:FindFirstChild("BlockShield") and player.playerData.Stamina.Value >= 1 do
+                print("DEBUG: Block loop - Current stamina:", player.playerData.Stamina.Value)
+                print("DEBUG: Block value:", player.playerData.amethystCombat.Blocking.Value)
 
                 -- Increment blocking counter
                 player.playerData.amethystCombat.Blocking.Value += 0.1
                 
-                -- Decrease walkspeed (minimum of 4)
+                -- Decrease walkspeed
                 local currentWalkSpeed = character.Humanoid.WalkSpeed
                 character.Humanoid.WalkSpeed = currentWalkSpeed / 1.15
+                print("DEBUG: New walkspeed:", character.Humanoid.WalkSpeed)
                 
                 -- Decrease stamina
                 if player.playerData.Stamina.Value > 0 then
                     player.playerData.Stamina.Value -= 1
+                    print("DEBUG: Decreased stamina to:", player.playerData.Stamina.Value)
                 end
                 
                 task.wait(0.1)
             end
+            print("DEBUG: Block loop ended")
         end)
         
         -- Store thread for cleanup
         character:SetAttribute("BlockThread", thread)
         
     else
-        print("Server : Unblocked")
+        print("DEBUG: Starting unblock sequence")
         
         -- Remove shield
         local shield = character:FindFirstChild("BlockShield")
         if shield then
+            print("DEBUG: Removing block shield")
             shield:Destroy()
+        else
+            print("DEBUG: No shield found to remove")
         end
         
         -- Restore original walkspeed
         local originalWalkSpeed = character:GetAttribute("OriginalWalkSpeed")
         if originalWalkSpeed then
+            print("DEBUG: Restoring original walkspeed:", originalWalkSpeed)
             character.Humanoid.WalkSpeed = originalWalkSpeed
             character:SetAttribute("OriginalWalkSpeed", nil)
+        else
+            print("DEBUG: No original walkspeed found to restore")
         end
         
         -- Reset blocking value
+        print("DEBUG: Resetting blocking value")
         player.playerData.amethystCombat.Blocking.Value = 0
     end
 end
