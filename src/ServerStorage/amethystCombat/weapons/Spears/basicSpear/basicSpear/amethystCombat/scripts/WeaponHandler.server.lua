@@ -5,7 +5,16 @@ local tool = script.Parent.Parent.Parent
 local domainName
 
 tool.Equipped:Connect(function()
+
+
 	local player = game.Players:GetPlayerFromCharacter(tool.Parent)
+
+	if player.playerData.amethystCombat.Stunned.Value then
+		local humanoid = tool.Parent:WaitForChild("Humanoid")
+		humanoid:UnequipTools()
+		return
+	end
+
 	domainName = player:WaitForChild("playerData").amethystCombat.Domain.Value
 
 	if domainName then
@@ -19,6 +28,8 @@ end)
 
 tool.Unequipped:Connect(function()
 	local player = tool.Parent.Parent
+
+	
 	domainName = player:WaitForChild("playerData").amethystCombat.Domain.Value
 
 	if domainName then

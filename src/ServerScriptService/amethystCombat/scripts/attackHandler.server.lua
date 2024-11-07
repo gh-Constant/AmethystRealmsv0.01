@@ -204,6 +204,7 @@ local function onAttack(player, tool)
 	-- Add stamina check
 	if player.playerData.Stamina.Value < 5 then return end
 	player.playerData.amethystCombat.attackCooldown.Value = 0
+    if player.playerData.amethystCombat.Stunned.Value then return end
 	
 	-- Clear the hit enemies table for this new attack
 	hitEnemies[player.UserId] = {}
@@ -293,6 +294,8 @@ end
     @param blockState number - The block state (1 for blocking, 0 for not blocking)
 ]]--
 local function onBlock(player, tool, blockState)
+    if player.playerData.amethystCombat.Stunned.Value then return end
+
     print("DEBUG: onBlock function called for player:", player.Name)
     print("DEBUG: blockState:", blockState)
     

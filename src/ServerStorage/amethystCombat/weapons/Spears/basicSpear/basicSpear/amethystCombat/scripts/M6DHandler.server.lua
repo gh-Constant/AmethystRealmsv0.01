@@ -2,6 +2,10 @@ local m6d
 local tool = script.Parent.Parent.Parent
 
 tool.Equipped:Connect(function()
+	local player = game.Players:GetPlayerFromCharacter(tool.Parent)
+	if player.playerData.amethystCombat.Stunned.Value then
+		return
+	end
 	local char = tool.Parent
 	local a:Weld = char:FindFirstChild("RightHand"):WaitForChild("RightGrip")
 	m6d = Instance.new("Motor6D")
@@ -15,5 +19,7 @@ tool.Equipped:Connect(function()
 end)
 
 tool.Unequipped:Connect(function()
-	m6d:Destroy()
+	if m6d then
+		m6d:Destroy()
+	end
 end)

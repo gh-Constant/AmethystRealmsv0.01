@@ -14,6 +14,12 @@ weapon:loadAnimations(humanoid)
 
 -- Set up equip event
 tool.Equipped:Connect(function()
+
+    if plr.playerData.amethystCombat.Stunned.Value then
+        print("Player is stunned, cannot equip weapon")
+        return
+    end
+
 	weapon:equip()
 end)
 
@@ -27,6 +33,16 @@ tool.Activated:Connect(function()
 		print("Not enough stamina to attack")
 		return
 	end
+
+    if plr.playerData.amethystMovement.Values.Dodge.Value then
+        print("Player is dodging, cannot attack")
+        return
+    end
+
+    if plr.playerData.amethystCombat.Stunned.Value then
+        print("Player is stunned, cannot attack")
+        return
+    end
 
     if isBlocking == 0 then  -- Only attack if not blocking
         isAttacking = true

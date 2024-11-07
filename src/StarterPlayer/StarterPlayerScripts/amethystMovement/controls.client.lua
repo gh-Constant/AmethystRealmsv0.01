@@ -27,6 +27,10 @@ local function handleInputBegan(input, gameProcessed)
 			print("run")
 		elseif control == amethystMovement.Controls.Dodge.Value then
 			if amethystMovement.Values.Dodge.Value == false then
+				if player.playerData.amethystCombat.Stunned.Value then
+					return
+				end
+
 				local forward = uis:IsKeyDown(Enum.KeyCode.W)
 				local backward = uis:IsKeyDown(Enum.KeyCode.S)
 				local right = uis:IsKeyDown(Enum.KeyCode.D)

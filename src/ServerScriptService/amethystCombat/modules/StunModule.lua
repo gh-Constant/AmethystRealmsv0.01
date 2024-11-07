@@ -9,74 +9,79 @@ local TweenService = game:GetService("TweenService")
 -- Get the existing remote
 local stunRemote = ReplicatedStorage.amethystCombat.remotes.stunRemote
 
+-- Define activeConnections table BEFORE it's used
+local activeConnections = {}
+
 -- Create stun UI function
 local function createStunUI(character)
 	local stunBillboard = Instance.new("BillboardGui")
 	stunBillboard.Name = "StunEffect"
-	stunBillboard.Size = UDim2.new(4, 0, 4, 0)
+	stunBillboard.Size = UDim2.new(2, 0, 2, 0)
 	stunBillboard.StudsOffset = Vector3.new(0, 2, 0)
 	stunBillboard.AlwaysOnTop = true
 	
-	-- Create outer circle for stars to rotate around
-	local outerCircle = Instance.new("Frame")
-	outerCircle.Name = "OuterCircle"
-	outerCircle.Size = UDim2.new(1, 0, 1, 0)
-	outerCircle.Position = UDim2.new(0, 0, 0, 0)
-	outerCircle.BackgroundTransparency = 1
-	outerCircle.Parent = stunBillboard
+	-- Create background circle
+	local background = Instance.new("Frame")
+	background.Name = "Background"
+	background.Size = UDim2.new(1, 0, 1, 0)
+	background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	background.BackgroundTransparency = 0.7
+	background.BorderSizePixel = 0
+	background.Parent = stunBillboard
 	
-	-- Create stars
-	local numStars = 4
-	local stars = {}
+	-- Make it circular
+	local uiCorner = Instance.new("UICorner")
+	uiCorner.CornerRadius = UDim.new(1, 0)
+	uiCorner.Parent = background
 	
-	for i = 1, numStars do
-		local star = Instance.new("ImageLabel")
-		star.Name = "Star" .. i
-		star.Size = UDim2.new(0.2, 0, 0.2, 0)
-		star.BackgroundTransparency = 1
-		star.Image = "rbxassetid://17193841062" -- Make sure this is a valid star image ID
-		star.ImageColor3 = Color3.fromRGB(255, 255, 0)
-		star.AnchorPoint = Vector2.new(0.5, 0.5)
-		star.Parent = outerCircle
-		stars[i] = star
-	end
+	-- Create border
+	local border = Instance.new("UIStroke")
+	border.Color = Color3.fromRGB(255, 0, 0)
+	border.Thickness = 3
+	border.Parent = background
 	
-	-- Create dizzy text
+	-- Create stun text
 	local stunText = Instance.new("TextLabel")
 	stunText.Name = "StunText"
-	stunText.Size = UDim2.new(0.6, 0, 0.2, 0)
-	stunText.Position = UDim2.new(0.2, 0, 0.4, 0)
+	stunText.Size = UDim2.new(0.8, 0, 0.4, 0)
+	stunText.Position = UDim2.new(0.1, 0, 0.3, 0)
 	stunText.BackgroundTransparency = 1
-	stunText.Text = "STUNNED!"
-	stunText.TextColor3 = Color3.fromRGB(255, 50, 50)
+	stunText.Text = "STUNNED"
+	stunText.TextColor3 = Color3.fromRGB(255, 255, 255)
 	stunText.TextScaled = true
 	stunText.Font = Enum.Font.GothamBlack
-	stunText.Parent = stunBillboard
+	stunText.Parent = background
 	
-	-- Animate stars
-	local rotationSpeed = 2 -- Rotations per second
-	local radius = 0.35 -- Distance from center
+	-- Create pulsing effect for text and border
+	local textTween = TweenService:Create(stunText, TweenInfo.new(
+		0.5,                    -- Time
+		Enum.EasingStyle.Sine,  -- EasingStyle
+		Enum.EasingDirection.InOut, -- EasingDirection
+		-1,                     -- RepeatCount (-1 means infinite)
+		true                    -- Reverses
+	), {
+		TextColor3 = Color3.fromRGB(255, 0, 0)
+	})
 	
-	local lastUpdate = tick()
-	local startTime = tick()
+	local borderTween = TweenService:Create(border, TweenInfo.new(
+		0.5,
+		Enum.EasingStyle.Sine,
+		Enum.EasingDirection.InOut,
+		-1,
+		true
+	), {
+		Color = Color3.fromRGB(255, 255, 255)
+	})
 	
-	local connection = RunService.RenderStepped:Connect(function()
-		local currentTime = tick()
-		local deltaTime = currentTime - lastUpdate
-		local totalTime = currentTime - startTime
-		
-		for i, star in ipairs(stars) do
-			local angle = totalTime * rotationSpeed * 2 * math.pi + (i * 2 * math.pi / numStars)
-			local x = math.cos(angle) * radius
-			local y = math.sin(angle) * radius
-			star.Position = UDim2.new(0.5 + x, 0, 0.5 + y, 0)
-			star.Rotation = angle * (180/math.pi)
-		end
-		
-		lastUpdate = currentTime
-	end)
+	textTween:Play()
+	borderTween:Play()
 	
-	stunBillboard:SetAttribute("RotationConnection", connection)
+	-- Store connections
+	activeConnections[stunBillboard] = {
+		pulse = textTween,
+		borderPulse = borderTween
+	}
+	
 	stunBillboard.Parent = character.Head
 	return stunBillboard
 end
@@ -95,19 +100,15 @@ function StunModule.StunPlayer(player, duration)
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	if not humanoid or not rootPart then return end
 	
-	-- Store original states
-	local originalStates = {
-		AutoRotate = humanoid.AutoRotate
-	}
+	-- Store original position
+	local originalCFrame = rootPart.CFrame
 	
-	-- Apply stun effects
-	humanoid.AutoRotate = false    -- Prevents rotation
-	
-	-- Create heartbeat connection to control velocity
+	-- Create heartbeat connection to lock position
 	local heartbeatConnection
 	heartbeatConnection = RunService.Heartbeat:Connect(function()
 		if rootPart then
-			rootPart.AssemblyLinearVelocity = Vector3.new(0, -0.1, 0)
+			rootPart.CFrame = originalCFrame
+			rootPart.Anchored = true
 		end
 	end)
 	
@@ -121,30 +122,45 @@ function StunModule.StunPlayer(player, duration)
 	
 	-- Function to clean up everything
 	local function cleanupStun()
+		print("Cleanup started for:", player.Name)
 		if heartbeatConnection then
 			heartbeatConnection:Disconnect()
 			heartbeatConnection = nil
 		end
 		
 		if stunUI then
-			local rotationConnection = stunUI:GetAttribute("RotationConnection")
-			if rotationConnection then
-				rotationConnection:Disconnect()
+			if activeConnections[stunUI] then
+				activeConnections[stunUI].pulse:Cancel()
+				activeConnections[stunUI].borderPulse:Cancel()
+				activeConnections[stunUI] = nil
 			end
 			stunUI:Destroy()
 		end
 		
-		if humanoid then
-			humanoid.AutoRotate = originalStates.AutoRotate
+		if rootPart then
+			rootPart.Anchored = false
 		end
 		
 		if player then
 			player.playerData.amethystCombat.Stunned.Value = false
+			
+			-- Re-equip the current tool to reset animations
+			local character = player.Character
+			if character then
+				local tool = character:FindFirstChildOfClass("Tool")
+				if tool then
+					-- Unequip and re-equip to reset animations
+					tool.Parent = player.Backpack
+					task.wait()  -- Small wait to ensure unequip completes
+					tool.Parent = character
+				end
+			end
 		end
 		
 		stunRemote:FireClient(player, {
 			action = "StopStunAnimation"
 		})
+		print("Cleanup completed for:", player.Name)
 	end
 	
 	-- Create a connection to clean up if the character dies
@@ -156,12 +172,17 @@ function StunModule.StunPlayer(player, duration)
 		cleanupStun()
 	end)
 	
+	-- Make sure duration is a number and has a minimum value
+	duration = math.max(tonumber(duration) or 5, 0.1)
+	
 	-- Set timer for stun duration
 	task.delay(duration, function()
 		if deathConnection then
 			deathConnection:Disconnect()
+			deathConnection = nil
 		end
 		cleanupStun()
+		print("Stun timer completed after", duration, "seconds for:", player.Name)
 	end)
 end
 
