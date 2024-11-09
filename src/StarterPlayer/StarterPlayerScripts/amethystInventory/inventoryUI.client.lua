@@ -1,16 +1,18 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 -- Création de l'interface principale
 local InventoryUI = Instance.new("ScreenGui")
 InventoryUI.Name = "InventoryUI"
+InventoryUI.Enabled = true
 InventoryUI.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 
 -- Frame principale
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0.8, 0, 0.8, 0)
-MainFrame.Position = UDim2.new(0.1, 0, 0.1, 0)
+MainFrame.Size = UDim2.new(0.8, 0, 0.7, 0)
+MainFrame.Position = UDim2.new(0.1, 0, -1, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -34,11 +36,87 @@ mainShadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
 mainShadow.ImageTransparency = 0.5
 mainShadow.Parent = MainFrame
 
--- Section Équipement
+-- Section Stats (now on the left)
+local StatsFrame = Instance.new("Frame")
+StatsFrame.Name = "StatsFrame"
+StatsFrame.Size = UDim2.new(0.2, 0, 0.85, 0)
+StatsFrame.Position = UDim2.new(0.02, 0, 0.075, 0)
+StatsFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+StatsFrame.BorderSizePixel = 0
+StatsFrame.Parent = MainFrame
+
+-- Add corner radius to StatsFrame
+local statsCorner = Instance.new("UICorner")
+statsCorner.CornerRadius = UDim.new(0, 8)
+statsCorner.Parent = StatsFrame
+
+-- Create progress bars for Health and Stamina
+local function createProgressBar(name, yPosition)
+    local container = Instance.new("Frame")
+    container.Name = name .. "Container"
+    container.Size = UDim2.new(0.9, 0, 0.1, 0)
+    container.Position = UDim2.new(0.05, 0, yPosition, 0)
+    container.BackgroundTransparency = 1
+    container.Parent = StatsFrame
+
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.Size = UDim2.new(1, 0, 0.3, 0)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.TextSize = 14
+    label.Font = Enum.Font.GothamBold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+
+    local background = Instance.new("Frame")
+    background.Name = "Background"
+    background.Size = UDim2.new(1, 0, 0.3, 0)
+    background.Position = UDim2.new(0, 0, 0.4, 0)
+    background.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    background.BorderSizePixel = 0
+    background.Parent = container
+
+    local cornerBg = Instance.new("UICorner")
+    cornerBg.CornerRadius = UDim.new(0, 4)
+    cornerBg.Parent = background
+
+    local fill = Instance.new("Frame")
+    fill.Name = "Fill"
+    fill.Size = UDim2.new(1, 0, 1, 0)
+    fill.BackgroundColor3 = name == "Health" 
+        and Color3.fromRGB(220, 50, 50)  -- Red for health
+        or Color3.fromRGB(50, 150, 220)  -- Blue for stamina
+    fill.BorderSizePixel = 0
+    fill.Parent = background
+
+    local cornerFill = Instance.new("UICorner")
+    cornerFill.CornerRadius = UDim.new(0, 4)
+    cornerFill.Parent = fill
+
+    local value = Instance.new("TextLabel")
+    value.Name = "Value"
+    value.Size = UDim2.new(1, 0, 1, 0)
+    value.BackgroundTransparency = 1
+    value.Text = "100/100"
+    value.TextColor3 = Color3.new(1, 1, 1)
+    value.TextSize = 12
+    value.Font = Enum.Font.GothamBold
+    value.Parent = background
+
+    return fill, value
+end
+
+local healthFill, healthValue = createProgressBar("Health", 0.1)
+local staminaFill, staminaValue = createProgressBar("Stamina", 0.3)
+
+-- Section Équipement (now on the right)
 local EquipmentFrame = Instance.new("Frame")
 EquipmentFrame.Name = "EquipmentFrame"
-EquipmentFrame.Size = UDim2.new(0.3, 0, 0.8, 0)
-EquipmentFrame.Position = UDim2.new(0.05, 0, 0.1, 0)
+EquipmentFrame.Size = UDim2.new(0.2, 0, 0.85, 0)
+EquipmentFrame.Position = UDim2.new(0.78, 0, 0.075, 0)
 EquipmentFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 EquipmentFrame.BorderSizePixel = 0
 EquipmentFrame.Parent = MainFrame
@@ -50,18 +128,23 @@ equipCorner.Parent = EquipmentFrame
 
 -- Création des slots d'équipement
 local equipmentSlots = {
-    {name = "Helmet", position = UDim2.new(0.5, 0, 0.15, 0)},
+    -- Top row (Head)
+    {name = "Helmet", position = UDim2.new(0.5, 0, 0.1, 0)},
+    
+    -- Middle row (Body)
     {name = "Chestplate", position = UDim2.new(0.5, 0, 0.3, 0)},
-    {name = "Leggings", position = UDim2.new(0.5, 0, 0.45, 0)},
-    {name = "Boots", position = UDim2.new(0.5, 0, 0.6, 0)},
-    {name = "Sword", position = UDim2.new(0.25, 0, 0.75, 0)},
-    {name = "OffHand", position = UDim2.new(0.75, 0, 0.75, 0)}
+    {name = "Leggings", position = UDim2.new(0.5, 0, 0.5, 0)},
+    {name = "Boots", position = UDim2.new(0.5, 0, 0.7, 0)},
+    
+    -- Bottom row (Weapons)
+    {name = "Sword", position = UDim2.new(0.25, 0, 0.85, 0)},
+    {name = "OffHand", position = UDim2.new(0.75, 0, 0.85, 0)}
 }
 
 for _, slot in ipairs(equipmentSlots) do
     local slotFrame = Instance.new("Frame")
     slotFrame.Name = slot.name
-    slotFrame.Size = UDim2.new(0.2, 0, 0.1, 0)
+    slotFrame.Size = UDim2.new(0.35, 0, 0.15, 0)  -- Made slots bigger
     slotFrame.Position = slot.position
     slotFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     slotFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
@@ -76,65 +159,63 @@ for _, slot in ipairs(equipmentSlots) do
     -- Add slot stroke
     local slotStroke = Instance.new("UIStroke")
     slotStroke.Color = Color3.fromRGB(80, 80, 85)
-    slotStroke.Thickness = 1
+    slotStroke.Thickness = 1.5
     slotStroke.Parent = slotFrame
+
+    -- Add slot icon (new)
+    local iconImage = Instance.new("ImageLabel")
+    iconImage.Name = "Icon"
+    iconImage.Size = UDim2.new(0.7, 0, 0.7, 0)
+    iconImage.Position = UDim2.new(0.15, 0, 0.15, 0)
+    iconImage.BackgroundTransparency = 1
+    iconImage.ImageTransparency = 0.5
+    iconImage.ImageColor3 = Color3.fromRGB(200, 200, 200)
+    iconImage.ScaleType = Enum.ScaleType.Fit
+    
+    -- Set icon based on slot type
+    if slot.name == "Helmet" then
+        iconImage.Image = "rbxassetid://6023250471"
+    elseif slot.name == "Chestplate" then
+        iconImage.Image = "rbxassetid://6023426926"
+    elseif slot.name == "Leggings" then
+        iconImage.Image = "rbxassetid://6023426926"
+    elseif slot.name == "Boots" then
+        iconImage.Image = "rbxassetid://6023250471"
+    elseif slot.name == "Sword" then
+        iconImage.Image = "rbxassetid://6022668888"
+    elseif slot.name == "OffHand" then
+        iconImage.Image = "rbxassetid://6022668888"
+    end
+    
+    iconImage.Parent = slotFrame
 
     -- Add slot label
     local label = Instance.new("TextLabel")
     label.Name = "Label"
     label.Size = UDim2.new(1, 0, 0.3, 0)
-    label.Position = UDim2.new(0, 0, 1, 2)
+    label.Position = UDim2.new(0, 0, 1.1, 0)  -- Adjusted position to be below the slot
     label.BackgroundTransparency = 1
     label.Text = slot.name
     label.TextColor3 = Color3.fromRGB(200, 200, 200)
-    label.TextSize = 10
+    label.TextSize = 12
     label.Font = Enum.Font.GothamBold
     label.Parent = slotFrame
-end
 
--- Section Stats
-local StatsFrame = Instance.new("Frame")
-StatsFrame.Name = "StatsFrame"
-StatsFrame.Size = UDim2.new(0.25, 0, 0.8, 0)
-StatsFrame.Position = UDim2.new(0.7, 0, 0.1, 0)
-StatsFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-StatsFrame.BorderSizePixel = 0
-StatsFrame.Parent = MainFrame
-
--- Add corner radius to StatsFrame
-local statsCorner = Instance.new("UICorner")
-statsCorner.CornerRadius = UDim.new(0, 8)
-statsCorner.Parent = StatsFrame
-
--- Création des stats
-local stats = {
-    {name = "Health", value = "100/100"},
-    {name = "Stamina", value = "100/100"},
-    {name = "Strength", value = "10"},
-    {name = "Defense", value = "5"}
-}
-
-for i, stat in ipairs(stats) do
-    local statLabel = Instance.new("TextLabel")
-    statLabel.Name = stat.name
-    statLabel.Size = UDim2.new(0.9, 0, 0.1, 0)
-    statLabel.Position = UDim2.new(0.05, 0, 0.1 + (i-1) * 0.12, 0)
-    statLabel.BackgroundTransparency = 1
-    statLabel.Text = stat.name .. ": " .. stat.value
-    statLabel.TextColor3 = Color3.new(1, 1, 1)
-    statLabel.Parent = StatsFrame
-
-    -- Style stat label
-    statLabel.Font = Enum.Font.GothamBold
-    statLabel.TextSize = 14
-    statLabel.TextXAlignment = Enum.TextXAlignment.Left
+    -- Add ViewportFrame for 3D items (when equipped)
+    local viewport = Instance.new("ViewportFrame")
+    viewport.Name = "ItemViewport"
+    viewport.Size = UDim2.new(0.8, 0, 0.8, 0)
+    viewport.Position = UDim2.new(0.1, 0, 0.1, 0)
+    viewport.BackgroundTransparency = 1
+    viewport.Visible = false  -- Only visible when item is equipped
+    viewport.Parent = slotFrame
 end
 
 -- Section Inventaire
 local InventoryFrame = Instance.new("ScrollingFrame")
 InventoryFrame.Name = "InventoryFrame"
-InventoryFrame.Size = UDim2.new(0.25, 0, 0.8, 0)
-InventoryFrame.Position = UDim2.new(0.4, 0, 0.1, 0)
+InventoryFrame.Size = UDim2.new(0.25, 0, 0.85, 0)
+InventoryFrame.Position = UDim2.new(0.51, 0, 0.075, 0)
 InventoryFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 InventoryFrame.BorderSizePixel = 0
 InventoryFrame.Parent = MainFrame
@@ -227,38 +308,30 @@ for i = 1, 20 do -- 5x4 grid
     quantityCorner.Parent = quantityLabel
 end
 
--- Fonction pour afficher/cacher l'inventaire
-local function toggleInventory()
-    InventoryUI.Enabled = not InventoryUI.Enabled
-end
+-- Section Character Viewport (new)
+local CharacterFrame = Instance.new("Frame")
+CharacterFrame.Name = "CharacterFrame"
+CharacterFrame.Size = UDim2.new(0.25, 0, 0.85, 0)
+CharacterFrame.Position = UDim2.new(0.24, 0, 0.075, 0)
+CharacterFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+CharacterFrame.BorderSizePixel = 0
+CharacterFrame.Parent = MainFrame
 
--- Connexion à l'événement de touche (par exemple "I" pour Inventaire)
-local UserInputService = game:GetService("UserInputService")
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Enum.KeyCode.I then
-        toggleInventory()
-    end
-end)
+-- Add corner radius to CharacterFrame
+local charCorner = Instance.new("UICorner")
+charCorner.CornerRadius = UDim.new(0, 8)
+charCorner.Parent = CharacterFrame
 
--- Initialisation
-InventoryUI.Enabled = false
+-- Add ViewportFrame for character
+local characterViewport = Instance.new("ViewportFrame")
+characterViewport.Name = "CharacterViewport"
+characterViewport.Size = UDim2.new(1, -20, 1, -20)
+characterViewport.Position = UDim2.new(0, 10, 0, 10)
+characterViewport.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+characterViewport.BackgroundTransparency = 0.5
+characterViewport.Parent = CharacterFrame
 
--- Update the updateSlot function to handle rarity
-local function updateSlot(slotNumber, itemData)
-    local slot = InventoryFrame:FindFirstChild("Slot" .. slotNumber)
-    if slot and itemData then
-        local imageLabel = slot:FindFirstChild("ItemImage")
-        local viewport = slot:FindFirstChild("ItemViewport")
-        local quantityLabel = slot:FindFirstChild("QuantityLabel")
-        local rarityBorder = slot:FindFirstChild("RarityBorder")
-        
-        -- Update rarity border
-        if rarityBorder and itemData.rarity then
-            local rarityColor = RARITY_COLORS[itemData.rarity:lower()] or RARITY_COLORS.common
-            rarityBorder.Color = rarityColor
-            rarityBorder.Transparency = 0 -- Make visible
-        elseif rarityBorder then
-            rarityBorder.Transparency = 1 -- Hide if no rarity
-        end
-    end
-end
+-- Add corner radius to ViewportFrame
+local viewportCorner = Instance.new("UICorner")
+viewportCorner.CornerRadius = UDim.new(0, 6)
+viewportCorner.Parent = characterViewport
