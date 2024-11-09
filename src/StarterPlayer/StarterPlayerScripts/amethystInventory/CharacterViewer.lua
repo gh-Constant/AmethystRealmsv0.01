@@ -45,6 +45,9 @@ function CharacterViewer.new(viewportFrame)
     print("4. Initial character setup")
     self:updateCharacter()
     
+    -- Add refresh connection property
+    self.refreshConnection = nil
+    
     return self
 end
 
@@ -149,7 +152,27 @@ function CharacterViewer:updateCharacter()
     end
 end
 
+function CharacterViewer:startRefreshing()
+    -- Clear existing refresh connection if it exists
+    if self.refreshConnection then
+        self.refreshConnection:Disconnect()
+    end
+    
+    -- Create new refresh connection
+    self.refreshConnection = RunService.Heartbeat:Connect(function()
+        self:updateCharacter()
+    end)
+end
+
+function CharacterViewer:stopRefreshing()
+    if self.refreshConnection then
+        self.refreshConnection:Disconnect()
+        self.refreshConnection = nil
+    end
+end
+
 function CharacterViewer:destroy()
+    self:stopRefreshing()
     if self.rotationConnection then
         self.rotationConnection:Disconnect()
         self.rotationConnection = nil

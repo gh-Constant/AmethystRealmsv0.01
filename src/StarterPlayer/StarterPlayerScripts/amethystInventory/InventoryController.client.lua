@@ -69,12 +69,15 @@ local function toggleInventory()
         
         if not characterViewer then
             characterViewer = CharacterViewer.new(viewportFrame)
+            characterViewer:startRefreshing()  -- Start refresh cycle
         else
             characterViewer:update()
+            characterViewer:startRefreshing()  -- Restart refresh cycle
         end
     else
         -- Cleanup when closing inventory
         if characterViewer then
+            characterViewer:stopRefreshing()  -- Stop refresh cycle
             characterViewer:destroy()
             characterViewer = nil
         end
