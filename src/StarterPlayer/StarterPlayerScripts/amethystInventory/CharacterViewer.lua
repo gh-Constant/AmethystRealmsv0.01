@@ -3,31 +3,32 @@ CharacterViewer.__index = CharacterViewer
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
--- Constants at the top of the file
-local CAMERA_DISTANCE = 12   -- Increased from 5
-local CAMERA_HEIGHT = 2.5     -- Slightly adjusted
-local CAMERA_FOV = 50       -- Added FOV control
-local ROTATION_SPEED = 0.2    -- Slightly slower rotation
+-- Constants
+local CAMERA_DISTANCE = 13
+local CAMERA_HEIGHT = 2.5
+local CAMERA_FOV = 40
+local AUTO_ROTATION_SPEED = 0.3
+local MANUAL_ROTATION_SPEED = 0.01
 
 function CharacterViewer.new(viewportFrame)
-    print("1. Starting CharacterViewer.new")
-    
-    if not viewportFrame then
-        warn("ViewportFrame is nil!")
-        return nil
-    end
-    
     local self = setmetatable({}, CharacterViewer)
     self.viewportFrame = viewportFrame
+    self.isDragging = false
+    self.rotationAngle = 0
+    self.lastMousePosition = nil
+    self.autoRotate = true
+    self.currentCharacter = nil
+    self.refreshConnection = nil
     
-    print("2. Setting up camera")
+    -- Setup camera
     local camera = Instance.new("Camera")
-    camera.FieldOfView = CAMERA_FOV  -- Set the FOV
+    camera.FieldOfView = CAMERA_FOV
     viewportFrame.CurrentCamera = camera
     self.camera = camera
     
-    print("3. Setting up lighting")
+    -- Setup lighting
     local light = Instance.new("PointLight")
     light.Brightness = 2
     light.Range = 20
@@ -42,125 +43,24 @@ function CharacterViewer.new(viewportFrame)
     light.Parent = lightPart
     lightPart.Parent = viewportFrame
     
-    print("4. Initial character setup")
-    self:updateCharacter()
-    
-    -- Add refresh connection property
-    self.refreshConnection = nil
+    -- Setup input handlers
+    self:setupInputHandlers()
     
     return self
 end
 
-function CharacterViewer:waitForCharacter()
-    local player = Players.LocalPlayer
-    if not player then return nil end
-    
-    local character = player.Character
-    if not character then
-        character = player.CharacterAdded:Wait()
-    end
-    
-    -- Wait for essential parts
-    local humanoid = character:WaitForChild("Humanoid", 5)
-    local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 5)
-    
-    if not humanoid or not humanoidRootPart then
-        warn("Failed to get essential character parts")
-        return nil
-    end
-    
-    return character
-end
-
-function CharacterViewer:updateCharacter()
-    print("5. Starting updateCharacter")
-    
-    -- Wait for character
-    print("6. Waiting for character")
-    local character = self:waitForCharacter()
-    if not character then
-        warn("No character available")
-        return
-    end
-    
-    print("7. Character found:", character.Name)
-    
-    -- Clear existing character
-    print("8. Clearing existing character")
-    for _, child in ipairs(self.viewportFrame:GetChildren()) do
-        if child:IsA("Model") then
-            child:Destroy()
-        end
-    end
-    
-    -- Create viewport character
-    print("9. Creating character representation")
-    local viewportCharacter = Instance.new("Model")
-    viewportCharacter.Name = "ViewportCharacter"
-    
-    -- Clone basic parts
-    for _, part in ipairs(character:GetChildren()) do
-        if part:IsA("BasePart") or part:IsA("MeshPart") then
-            local clone = part:Clone()
-            clone:ClearAllChildren() -- Remove any children of the part
-            clone.Anchored = true
-            clone.Parent = viewportCharacter
-        end
-    end
-    
-    -- Clone accessories
-    for _, accessory in ipairs(character:GetChildren()) do
-        if accessory:IsA("Accessory") then
-            local handle = accessory:FindFirstChild("Handle")
-            if handle then
-                local clone = handle:Clone()
-                clone:ClearAllChildren()
-                clone.Anchored = true
-                clone.Parent = viewportCharacter
-            end
-        end
-    end
-    
-    print("10. Positioning character")
-    -- Position character in front of camera
-    viewportCharacter:PivotTo(CFrame.new(0, 1.8, 0) * CFrame.Angles(0, math.rad(180), 0))
-    viewportCharacter.Parent = self.viewportFrame
-    
-    -- Store reference
-    self.currentCharacter = viewportCharacter
-    
-    -- Adjust camera to better frame the character
-    local cameraPosition = Vector3.new(0, CAMERA_HEIGHT, CAMERA_DISTANCE)
-    local lookAt = Vector3.new(0, CAMERA_HEIGHT * 0.8, 0)  -- Look slightly below camera height
-    self.camera.CFrame = CFrame.new(cameraPosition, lookAt)
-    
-    print("11. Character setup complete")
-    
-    -- Start auto-rotation
-    if not self.rotationConnection then
-        local rotationAngle = 0
-        self.rotationConnection = RunService.RenderStepped:Connect(function(deltaTime)
-            if self.currentCharacter then
-                rotationAngle = rotationAngle + (deltaTime * ROTATION_SPEED)
-                local currentPivot = self.currentCharacter:GetPivot()
-                local newCFrame = CFrame.new(currentPivot.Position) * 
-                                CFrame.Angles(0, rotationAngle, 0) * 
-                                CFrame.new(0, 0, 0)
-                self.currentCharacter:PivotTo(newCFrame)
-            end
-        end)
-    end
-end
-
 function CharacterViewer:startRefreshing()
-    -- Clear existing refresh connection if it exists
     if self.refreshConnection then
         self.refreshConnection:Disconnect()
     end
     
+    self:updateCharacter() -- Initial update
+    
     -- Create new refresh connection
     self.refreshConnection = RunService.Heartbeat:Connect(function()
-        self:updateCharacter()
+        if not self.isDragging then -- Only update if not manually rotating
+            self:updateCharacter()
+        end
     end)
 end
 
@@ -171,22 +71,183 @@ function CharacterViewer:stopRefreshing()
     end
 end
 
+function CharacterViewer:setupInputHandlers()
+    -- Mouse button down
+    self.viewportFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            self.isDragging = true
+            self.lastMousePosition = input.Position
+            self.autoRotate = false -- Disable auto rotation while dragging
+        end
+    end)
+    
+    -- Mouse movement
+    self.viewportFrame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement and self.isDragging then
+            local delta = input.Position - self.lastMousePosition
+            self.rotationAngle = self.rotationAngle - (delta.X * MANUAL_ROTATION_SPEED)
+            self.lastMousePosition = input.Position
+            
+            if self.currentCharacter then
+                local newCFrame = CFrame.new(Vector3.new(0, 1.8, 0)) * 
+                                CFrame.Angles(0, self.rotationAngle, 0)
+                self.currentCharacter:PivotTo(newCFrame)
+            end
+        end
+    end)
+    
+    -- Mouse button up
+    self.viewportFrame.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            self.isDragging = false
+            
+            -- Re-enable auto rotation after a short delay
+            task.delay(1, function()
+                if not self.isDragging then -- Double check we're still not dragging
+                    self.autoRotate = true
+                    
+                    -- Smoothly transition from current angle
+                    if self.currentCharacter then
+                        local currentRotation = self.rotationAngle
+                        local targetRotation = currentRotation + (math.pi * 2) -- One full rotation
+                        local startTime = tick()
+                        local duration = 0.5 -- Duration of the transition in seconds
+                        
+                        -- Cleanup existing transition
+                        if self.transitionConnection then
+                            self.transitionConnection:Disconnect()
+                            self.transitionConnection = nil
+                        end
+                        
+                        -- Create smooth transition
+                        self.transitionConnection = RunService.RenderStepped:Connect(function()
+                            local elapsed = tick() - startTime
+                            local alpha = math.min(elapsed / duration, 1)
+                            
+                            -- Ease in-out interpolation
+                            alpha = alpha < 0.5 
+                                and 2 * alpha * alpha 
+                                or 1 - (-2 * alpha + 2)^2 / 2
+                            
+                            if alpha >= 1 then
+                                self.transitionConnection:Disconnect()
+                                self.transitionConnection = nil
+                                return
+                            end
+                            
+                            self.rotationAngle = currentRotation + (targetRotation - currentRotation) * alpha
+                        end)
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+function CharacterViewer:updateCharacter()
+    -- Clear existing character
+    if self.currentCharacter then
+        self.currentCharacter:Destroy()
+        self.currentCharacter = nil
+    end
+    
+    local player = Players.LocalPlayer
+    if not player then 
+        warn("No LocalPlayer found")
+        return 
+    end
+    
+    local character = player.Character
+    if not character or not character.Parent then 
+        warn("No valid character found")
+        return 
+    end
+    
+    -- Wait for essential parts
+    local humanoid = character:FindFirstChild("Humanoid")
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not rootPart then 
+        warn("Missing essential character parts")
+        return 
+    end
+    
+    -- Clone the character with error handling
+    local clonedCharacter = Instance.new("Model")
+    clonedCharacter.Name = "ViewportCharacter"
+    
+    -- Clone basic parts first
+    local success = pcall(function()
+        -- Clone BaseParts
+        for _, part in ipairs(character:GetChildren()) do
+            if part:IsA("BasePart") then
+                local clonedPart = part:Clone()
+                clonedPart:ClearAllChildren() -- Remove any children
+                clonedPart.Anchored = true
+                clonedPart.Parent = clonedCharacter
+            end
+        end
+        
+        -- Clone Accessories (just the handle parts)
+        for _, accessory in ipairs(character:GetChildren()) do
+            if accessory:IsA("Accessory") then
+                local handle = accessory:FindFirstChild("Handle")
+                if handle then
+                    local clonedHandle = handle:Clone()
+                    clonedHandle:ClearAllChildren()
+                    clonedHandle.Anchored = true
+                    clonedHandle.Parent = clonedCharacter
+                end
+            end
+        end
+    end)
+    
+    if not success then
+        warn("Failed to clone character parts")
+        return
+    end
+    
+    -- Position character
+    clonedCharacter:PivotTo(CFrame.new(Vector3.new(0, 1.8, 0)) * CFrame.Angles(0, self.rotationAngle, 0))
+    clonedCharacter.Parent = self.viewportFrame
+    
+    -- Store reference
+    self.currentCharacter = clonedCharacter
+    
+    -- Set up camera
+    local cameraPosition = Vector3.new(0, CAMERA_HEIGHT, CAMERA_DISTANCE)
+    local lookAt = Vector3.new(0, CAMERA_HEIGHT * 0.8, 0)
+    self.camera.CFrame = CFrame.new(cameraPosition, lookAt)
+    
+    -- Update rotation
+    if not self.rotationConnection then
+        self.rotationConnection = RunService.RenderStepped:Connect(function(deltaTime)
+            if self.currentCharacter and self.autoRotate and not self.isDragging then
+                self.rotationAngle = self.rotationAngle + (deltaTime * AUTO_ROTATION_SPEED)
+                local newCFrame = CFrame.new(Vector3.new(0, 1.8, 0)) * 
+                                CFrame.Angles(0, self.rotationAngle, 0)
+                self.currentCharacter:PivotTo(newCFrame)
+            end
+        end)
+    end
+end
+
 function CharacterViewer:destroy()
     self:stopRefreshing()
+    
     if self.rotationConnection then
         self.rotationConnection:Disconnect()
         self.rotationConnection = nil
+    end
+    
+    if self.transitionConnection then
+        self.transitionConnection:Disconnect()
+        self.transitionConnection = nil
     end
     
     if self.currentCharacter then
         self.currentCharacter:Destroy()
         self.currentCharacter = nil
     end
-end
-
-function CharacterViewer:update()
-    print("Update called")
-    self:updateCharacter()
 end
 
 return CharacterViewer 

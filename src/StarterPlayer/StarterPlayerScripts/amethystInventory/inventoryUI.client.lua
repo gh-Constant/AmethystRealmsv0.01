@@ -329,8 +329,20 @@ characterViewport.Size = UDim2.new(1, -20, 1, -20)
 characterViewport.Position = UDim2.new(0, 10, 0, 10)
 characterViewport.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 characterViewport.BackgroundTransparency = 0.5
-characterViewport.AnchorPoint = Vector2.new(0, 0)
+characterViewport.Active = true -- Make it receive input
 characterViewport.Parent = CharacterFrame
+
+-- Add a hint for users
+local rotateHint = Instance.new("TextLabel")
+rotateHint.Name = "RotateHint"
+rotateHint.Size = UDim2.new(1, 0, 0, 20)
+rotateHint.Position = UDim2.new(0, 0, 1, 5)
+rotateHint.BackgroundTransparency = 1
+rotateHint.Text = "Click and drag to rotate"
+rotateHint.TextColor3 = Color3.fromRGB(200, 200, 200)
+rotateHint.TextSize = 14
+rotateHint.Font = Enum.Font.GothamMedium
+rotateHint.Parent = characterViewport
 
 -- Add corner radius to ViewportFrame
 local viewportCorner = Instance.new("UICorner")
