@@ -329,6 +329,7 @@ characterViewport.Size = UDim2.new(1, -20, 1, -20)
 characterViewport.Position = UDim2.new(0, 10, 0, 10)
 characterViewport.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 characterViewport.BackgroundTransparency = 0.5
+characterViewport.AnchorPoint = Vector2.new(0, 0)
 characterViewport.Parent = CharacterFrame
 
 -- Add corner radius to ViewportFrame

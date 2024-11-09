@@ -3,6 +3,8 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CharacterViewer = require(script.Parent:WaitForChild("CharacterViewer"))
+
 local tweenInfo = TweenInfo.new(
     0.5,
     Enum.EasingStyle.Quart,
@@ -43,6 +45,8 @@ end
 humanoid:GetPropertyChangedSignal("Health"):Connect(updateBars)
 staminaValue.Changed:Connect(updateBars)
 
+local characterViewer = nil
+
 local function toggleInventory()
     local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
     local inventoryUI = playerGui:WaitForChild("InventoryUI")
@@ -59,14 +63,20 @@ local function toggleInventory()
     })
     tween:Play()
     
-    -- Initialize character viewer when inventory is opened
     if isInventoryOpen then
+        local characterFrame = mainFrame:WaitForChild("CharacterFrame")
+        local viewportFrame = characterFrame:WaitForChild("CharacterViewport")
+        
         if not characterViewer then
-            local characterFrame = mainFrame:WaitForChild("CharacterFrame")
-            local viewportFrame = characterFrame:WaitForChild("CharacterViewport")
             characterViewer = CharacterViewer.new(viewportFrame)
         else
-            characterViewer.update()
+            characterViewer:update()
+        end
+    else
+        -- Cleanup when closing inventory
+        if characterViewer then
+            characterViewer:destroy()
+            characterViewer = nil
         end
     end
 end

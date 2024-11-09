@@ -8,8 +8,8 @@ WeaponModule.__index = WeaponModule
 function WeaponModule.new(tool)
 	local self = setmetatable({}, WeaponModule)
 	self.tool = tool
-	self.attackspeed = tool.amethystCombat.settings.attackspeed.Value
-	self.equipspeed = tool.amethystCombat.settings.equipspeed.Value
+	self.attackspeed = tool.amethystCombat:WaitForChild("settings"):WaitForChild("attackspeed").Value
+	self.equipspeed = tool.amethystCombat:WaitForChild("settings"):WaitForChild("equipspeed").Value
 
 	-- Load animations by creating Animation instances
 	self.animations = {
