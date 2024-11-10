@@ -163,62 +163,81 @@ function CharacterViewer:updateCharacter()
         return 
     end
     
-    -- Wait for essential parts
-    local humanoid = character:FindFirstChild("Humanoid")
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if not humanoid or not rootPart then 
-        warn("Missing essential character parts")
-        return 
-    end
-    
-    -- Clone the character with error handling
+    -- Create new model
     local clonedCharacter = Instance.new("Model")
     clonedCharacter.Name = "ViewportCharacter"
     
-    -- Clone basic parts first
-    local success = pcall(function()
-        -- Clone BaseParts
+    -- Clone with detailed error reporting
+    local success, errorMsg = pcall(function()
+        -- Clone basic parts first
         for _, part in ipairs(character:GetChildren()) do
             if part:IsA("BasePart") then
-                local clonedPart = part:Clone()
-                clonedPart:ClearAllChildren() -- Remove any children
-                clonedPart.Anchored = true
-                clonedPart.Parent = clonedCharacter
+                local success2, err = pcall(function()
+                    local clonedPart = part:Clone()
+                    clonedPart.Anchored = true
+                    clonedPart.Parent = clonedCharacter
+                end)
+                if not success2 then
+                    warn("Failed to clone part:", part.Name, "Error:", err)
+                end
             end
         end
         
-        -- Clone Accessories (just the handle parts)
+        -- Clone accessories
         for _, accessory in ipairs(character:GetChildren()) do
             if accessory:IsA("Accessory") then
-                local handle = accessory:FindFirstChild("Handle")
-                if handle then
-                    local clonedHandle = handle:Clone()
-                    clonedHandle:ClearAllChildren()
-                    clonedHandle.Anchored = true
-                    clonedHandle.Parent = clonedCharacter
+                local success2, err = pcall(function()
+                    local clonedAccessory = accessory:Clone()
+                    clonedAccessory.Parent = clonedCharacter
+                end)
+                if not success2 then
+                    warn("Failed to clone accessory:", accessory.Name, "Error:", err)
+                end
+            end
+        end
+        
+        -- Clone tools with detailed logging
+        for _, tool in ipairs(character:GetChildren()) do
+            if tool:IsA("Tool") then
+                local success2, err = pcall(function()
+                    print("Attempting to clone tool:", tool.Name) -- Debug print
+                    local clonedTool = tool:Clone()
+                    
+                    -- Anchor all parts in the tool
+                    for _, part in ipairs(clonedTool:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.Anchored = true
+                        end
+                    end
+                    
+                    clonedTool.Parent = clonedCharacter
+                    print("Successfully cloned tool:", tool.Name) -- Debug print
+                end)
+                if not success2 then
+                    warn("Failed to clone tool:", tool.Name, "Error:", err)
                 end
             end
         end
     end)
     
     if not success then
-        warn("Failed to clone character parts")
+        warn("Failed to clone character:", errorMsg)
         return
     end
     
-    -- Position character
+    -- Position and parent the cloned character
     clonedCharacter:PivotTo(CFrame.new(Vector3.new(0, 1.8, 0)) * CFrame.Angles(0, self.rotationAngle, 0))
     clonedCharacter.Parent = self.viewportFrame
     
     -- Store reference
     self.currentCharacter = clonedCharacter
     
-    -- Set up camera
+    -- Update camera
     local cameraPosition = Vector3.new(0, CAMERA_HEIGHT, CAMERA_DISTANCE)
     local lookAt = Vector3.new(0, CAMERA_HEIGHT * 0.8, 0)
     self.camera.CFrame = CFrame.new(cameraPosition, lookAt)
     
-    -- Update rotation
+    -- Setup rotation connection if needed
     if not self.rotationConnection then
         self.rotationConnection = RunService.RenderStepped:Connect(function(deltaTime)
             if self.currentCharacter and self.autoRotate and not self.isDragging then
